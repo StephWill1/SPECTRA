@@ -1,0 +1,169 @@
+# Builds a real puzzle-bank.json for SPECTRA by sampling actual Sentinel-2,
+# Landsat, and/or NAIP pixels at reference locations, via the Microsoft
+# Planetary Computer STAC catalog (free, no API key required).
+
+# NOTE: this was written and formatted here but NOT executed here. This
+# sandbox has no network access to STAC/Earth-data endpoints. Run and debug
+# it locally in RStudio, where you already have working geospatial access.
+
+# Packages needed:
+install.packages(c("rstac", "terra", "sf", "jsonlite"))
+
+require(rstac)
+require(terra)
+require(sf)
+require(jsonlite)
+
+###################################################################################
+################################# Reference Sites #################################
+###################################################################################
+# Reference sites: point + acquisition date + the class label you want
+# that pixel to represent.`date` should be a cloud-free scene date near your point.
+
+sites <- data.frame(
+  id       = c("healthy_1", "stressed_1", "burned_1", "impervious_1", "soil_1", "water_1"),
+  lon      = c(-123.62, -122.10, -121.75, -122.68, -105.10, -122.90),
+  lat      = c(  45.82,   44.60,   44.10,   45.53,   40.20,   45.50),
+  date     = c("2024-07-15","2023-08-20","2021-09-05","2024-07-01","2024-07-01","2024-06-01"),
+  class_id = c("healthy","stressed","burned","impervious","soil","water"),
+  stringsAsFactors = FALSE
+)
+
+# Human-facing metadata for each class, edit if needed, this is what shows in
+# the game's hint log and result note.
+class_meta <- list(
+  healthy  = list(name = "Healthy conifer canopy",
+                  hints = c("Reflectance drops sharply between Red and Green.",
+                            "NIR reflectance is much higher than any visible band.",
+                            "Sampled from intact, actively photosynthesizing canopy."),
+                  note  = "Live foliage absorbs visible light for photosynthesis but scatters NIR strongly at the leaf mesophyll."),
+  stressed = list(name = "Drought-stressed / senescent vegetation",
+                  hints = c("Red/NIR contrast is present but weaker than healthy canopy.",
+                            "SWIR1 is elevated. Canopy moisture is dropping.",
+                            "Chlorophyll breakdown raises visible reflectance."),
+                  note  = "As chlorophyll degrades and leaf water drops, visible reflectance rises and NIR falls."),
+  burned   = list(name = "Burn scar / char",
+                  hints = c("Every band is low, dark across the spectrum.",
+                            "NIR collapses well below any vegetated curve.",
+                            "SWIR only modestly elevated, residual ash/exposed soil."),
+                  note  = "Fire removes NIR-scattering leaf structure and deposits dark char, suppressing reflectance broadly."),
+  impervious = list(name = "Impervious surface (pavement/rooftop)",
+                    hints = c("Reflectance is moderate and fairly flat across all bands.",
+                              "NIR is below any vegetated curve but clearly above water.",
+                              "No chlorophyll feature, no gradual soil-like SWIR rise."),
+                    note  = "Pavement, rooftops, and concrete lack a chlorophyll or soil-mineral feature, so their curves sit at moderate, comparatively flat reflectance across all bands."),
+  soil     = list(name = "Bare soil",
+                  hints = c("Curve rises steadily from Blue through SWIR1.",
+                            "SWIR1 is the single highest band.",
+                            "No sharp Red-to-NIR contrast."),
+                  note  = "Bare soil lacks a chlorophyll or leaf-structure feature, so its curve rises gradually with wavelength."),
+  water    = list(name = "Open water",
+                  hints = c("Reflectance is low everywhere, near zero by NIR.",
+                            "SWIR1/SWIR2 are essentially negligible.",
+                            "Blue/Green are the highest bands, not Red/NIR."),
+                  note  = "Water absorbs strongly with increasing wavelength — the near-inverse of a vegetation curve.")
+)
+
+###################################################################################
+################# STAC search + sampling helpers (Sentinel-2 L2A) #################
+###################################################################################
+
+pc_url <- "https://planetarycomputer.microsoft.com/api/stac/v1"
+
+# Sentinel-2 L2A surface-reflectance asset names for the 6 bands the game uses
+s2_assets <- c(blue = "B02", green = "B03", red = "B04",
+               nir = "B08", swir1 = "B11", swir2 = "B12")
+
+search_scene <- function(lon, lat, date, collection = "sentinel-2-l2a", window_days = 10) {
+  pt  <- st_sfc(st_point(c(lon, lat)), crs = 4326)
+  bb  <- st_bbox(st_buffer(st_transform(pt, 3857), 300) |> st_transform(4326))
+  dr  <- paste0(as.Date(date) - window_days, "/", as.Date(date) + window_days)
+  it  <- stac(pc_url) |>
+    stac_search(collections = collection, bbox = as.numeric(bb),
+                datetime = dr, limit = 10) |>
+    post_request()
+  # sign URLs for Planetary Computer access
+  if (requireNamespace("rstac", quietly = TRUE) && !is.null(it$features) && length(it$features) > 0) {
+    it <- items_sign(it, sign_fn = sign_planetary_computer())
+  }
+  it
+}
+
+extract_s2_pixel <- function(lon, lat, date) {
+  items <- search_scene(lon, lat, date, "sentinel-2-l2a")
+  if (is.null(items$features) || length(items$features) == 0) {
+    warning("No Sentinel-2 scene found near ", lon, ",", lat, " / ", date)
+    return(NULL)
+  }
+  # sort by cloud cover if available, take the clearest scene
+  cc <- sapply(items$features, function(f) f$properties$`eo:cloud_cover` %||% 100)
+  best <- items$features[[order(cc)[1]]]
+  
+  pt <- vect(cbind(lon, lat), crs = "EPSG:4326")
+  vals <- sapply(names(s2_assets), function(k) {
+    href <- best$assets[[s2_assets[[k]]]]$href
+    r <- rast(paste0("/vsicurl/", href))
+    pt_p <- project(pt, crs(r))
+    v <- terra::extract(r, pt_p)[, 2]
+    v / 10000 * 100   # Sentinel-2 L2A: DN/10000 = reflectance (0-1) -> percent
+  })
+  round(vals, 1)
+}
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+###################################################################################
+######################### Landsat Collection 2 L2 variant #########################
+###################################################################################
+# different asset names + scale/offset
+# Use this instead of / alongside Sentinel-2 for older imagery (e.g. fire
+# scars from years before Sentinel-2's 2015 launch).
+
+landsat_assets <- c(blue = "SR_B2", green = "SR_B3", red = "SR_B4",
+                    nir = "SR_B5", swir1 = "SR_B6", swir2 = "SR_B7")
+
+extract_landsat_pixel <- function(lon, lat, date) {
+  items <- search_scene(lon, lat, date, "landsat-c2-l2")
+  if (is.null(items$features) || length(items$features) == 0) {
+    warning("No Landsat scene found near ", lon, ",", lat, " / ", date)
+    return(NULL)
+  }
+  cc <- sapply(items$features, function(f) f$properties$`eo:cloud_cover` %||% 100)
+  best <- items$features[[order(cc)[1]]]
+  pt <- vect(cbind(lon, lat), crs = "EPSG:4326")
+  vals <- sapply(names(landsat_assets), function(k) {
+    href <- best$assets[[landsat_assets[[k]]]]$href
+    r <- rast(paste0("/vsicurl/", href))
+    pt_p <- project(pt, crs(r))
+    dn <- terra::extract(r, pt_p)[, 2]
+    # Landsat Collection 2 Level-2 scale/offset -> surface reflectance (0-1)
+    (dn * 0.0000275 - 0.2) * 100
+  })
+  round(vals, 1)
+}
+
+###################################################################################
+############################## Build the puzzle bank ##############################
+###################################################################################
+
+bank <- lapply(seq_len(nrow(sites)), function(i) {
+  s <- sites[i, ]
+  bands <- tryCatch(extract_s2_pixel(s$lon, s$lat, s$date), error = function(e) NULL)
+  if (is.null(bands)) return(NULL)
+  meta <- class_meta[[s$class_id]]
+  list(
+    id    = s$class_id,
+    name  = meta$name,
+    bands = unname(bands),   # order: blue, green, red, nir, swir1, swir2
+    hints = meta$hints,
+    note  = meta$note
+  )
+})
+bank <- Filter(Negate(is.null), bank)
+
+write_json(bank, "puzzle-bank.json", auto_unbox = TRUE, pretty = TRUE)
+cat("Wrote puzzle-bank.json with", length(bank), "entries.\n")
+
+# Drop puzzle-bank.json in the same folder as spectra.html,the game already 
+# tries to fetch('puzzle-bank.json') on load and will use these real values 
+# instead of its synthetic defaults whenever it finds a file shaped like this.
