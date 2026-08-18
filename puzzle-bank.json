@@ -1,0 +1,44 @@
+[
+  {
+    "id": "healthy",
+    "name": "Healthy conifer canopy",
+    "bands": [12.4, 15.4, 12.4, 62.8, 28.3, 18.3],
+    "hints": ["Reflectance drops sharply between Red and Green.", "NIR reflectance is much higher than any visible band.", "Sampled from intact, actively photosynthesizing canopy."],
+    "note": "Live foliage absorbs visible light for photosynthesis but scatters NIR strongly at the leaf mesophyll."
+  },
+  {
+    "id": "stressed",
+    "name": "Drought-stressed / senescent vegetation",
+    "bands": [11.3, 13.6, 11.6, 42.6, 25.1, 17.1],
+    "hints": ["Red/NIR contrast is present but weaker than healthy canopy.", "SWIR1 is elevated — canopy moisture is dropping.", "Chlorophyll breakdown raises visible reflectance."],
+    "note": "As chlorophyll degrades and leaf water drops, visible reflectance rises and NIR falls."
+  },
+  {
+    "id": "burned",
+    "name": "Burn scar / char",
+    "bands": [6.3, 7.4, 9.1, 9.8, 10.2, 9.7],
+    "hints": ["Every band is low — dark across the spectrum.", "NIR collapses well below any vegetated curve.", "SWIR only modestly elevated — residual ash/exposed soil."],
+    "note": "Fire removes NIR-scattering leaf structure and deposits dark char, suppressing reflectance broadly."
+  },
+  {
+    "id": "impervious",
+    "name": "Impervious surface (pavement/rooftop)",
+    "bands": [20.3, 23.4, 25.4, 28.4, 29.6, 28.7],
+    "hints": ["Reflectance is moderate and fairly flat across all bands.", "NIR is below any vegetated curve but clearly above water.", "No chlorophyll feature, no gradual soil-like SWIR rise."],
+    "note": "Pavement, rooftops, and concrete lack a chlorophyll or soil-mineral feature, so their curves sit at moderate, comparatively flat reflectance across all bands."
+  },
+  {
+    "id": "soil",
+    "name": "Bare soil",
+    "bands": [18, 20.8, 22.8, 36.9, 31.4, 26.3],
+    "hints": ["Curve rises steadily from Blue through SWIR1.", "SWIR1 is the single highest band.", "No sharp Red-to-NIR contrast."],
+    "note": "Bare soil lacks a chlorophyll or leaf-structure feature, so its curve rises gradually with wavelength."
+  },
+  {
+    "id": "water",
+    "name": "Open water",
+    "bands": [15.5, 19.3, 17.6, 49.1, 33.1, 24.3],
+    "hints": ["Reflectance is low everywhere, near zero by NIR.", "SWIR1/SWIR2 are essentially negligible.", "Blue/Green are the highest bands, not Red/NIR."],
+    "note": "Water absorbs strongly with increasing wavelength — the near-inverse of a vegetation curve."
+  }
+]
