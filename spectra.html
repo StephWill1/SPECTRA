@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPECTRA - daily RS/GIS puzzles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0E1512;
+    --panel:#17211C;
+    --panel-border:#2A362F;
+    --text:#E7EFE9;
+    --text-dim:#8FA69A;
+    --blue-band:#3E7CB1;
+    --green-band:#4F9153;
+    --red-band:#C1443A;
+    --nir-band:#D6577A;
+    --swir1-band:#C99A4A;
+    --swir2-band:#8C6A3F;
+    --correct:#4F9153;
+    --wrong:#C1443A;
+    --accent:#D6577A;
+    --easy:#4F9153;
+    --medium:#C99A4A;
+    --hard:#C1443A;
+    font-family:'IBM Plex Sans', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 20% 0%, rgba(214,87,122,0.06), transparent 45%),
+      radial-gradient(circle at 80% 100%, rgba(79,145,83,0.08), transparent 50%),
+      var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    display:flex; justify-content:center;
+    padding: clamp(16px, 4vw, 40px) 14px 60px;
+  }
+  .wrap{ width:100%; max-width:480px; }
+
+  header{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    border-bottom:1px solid var(--panel-border);
+    padding-bottom:14px; margin-bottom:14px;
+  }
+  .brand{ display:flex; flex-direction:column; gap:4px; }
+  .brand .mark{ font-family:'IBM Plex Mono', monospace; font-weight:700; font-size:22px; letter-spacing:0.12em; }
+  .brand .mark span{ color:var(--nir-band); }
+  .brand .tag{ font-size:12px; color:var(--text-dim); }
+  .stats{ font-family:'IBM Plex Mono', monospace; text-align:right; font-size:12px; color:var(--text-dim); line-height:1.6; }
+  .stats b{ color:var(--text); font-size:14px; }
+  .tierbadge{
+    display:inline-block; font-size:10px; font-weight:700; letter-spacing:0.06em;
+    padding:2px 7px; border-radius:3px; margin-top:2px;
+  }
+
+  .tabs{ display:flex; gap:8px; margin-bottom:16px; }
+  .tab{
+    flex:1; font-family:'IBM Plex Mono', monospace; font-size:12px; letter-spacing:0.05em;
+    text-align:center; padding:9px 0; border-radius:5px; border:1px solid var(--panel-border);
+    background:transparent; color:var(--text-dim); cursor:pointer;
+  }
+  .tab.active{ background:var(--panel); color:var(--text); border-color:var(--accent); }
+
+  .panel{ background:var(--panel); border:1px solid var(--panel-border); border-radius:6px; padding:16px; margin-bottom:14px; }
+  .panel-label{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.08em; color:var(--text-dim); text-transform:uppercase; margin-bottom:10px; display:flex; justify-content:space-between; }
+
+  canvas{ width:100%; display:block; }
+  .legend{ display:flex; flex-wrap:wrap; gap:10px 14px; margin-top:10px; font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--text-dim); }
+  .legend span{ display:inline-flex; align-items:center; gap:5px; }
+  .swatch{ width:8px; height:8px; border-radius:2px; display:inline-block; }
+
+  .prompt{ font-size:14px; color:var(--text-dim); margin-bottom:12px; line-height:1.5; }
+  .choices{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .choice{
+    font-family:'IBM Plex Sans', sans-serif; font-size:13.5px; text-align:left; padding:11px 12px;
+    border-radius:5px; border:1px solid var(--panel-border); background:#101B15; color:var(--text);
+    cursor:pointer; transition:all 0.15s ease;
+  }
+  .choice:hover:not(:disabled){ border-color:var(--accent); background:#17221B; }
+  .choice:disabled{ cursor:default; opacity:0.55; }
+  .choice.wrong{ border-color:var(--wrong); background:rgba(193,68,58,0.12); opacity:1; }
+  .choice.correct{ border-color:var(--correct); background:rgba(79,145,83,0.16); opacity:1; }
+
+  .attempts{ display:flex; gap:6px; margin-bottom:12px; }
+  .dot{ width:22px; height:22px; border-radius:4px; border:1px solid var(--panel-border); display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-dim); }
+  .dot.used-wrong{ background:var(--wrong); border-color:var(--wrong); color:#1a0d0b; }
+
+  .hintlog{ display:flex; flex-direction:column; gap:6px; margin-top:12px; }
+  .hint{ font-size:12.5px; color:var(--text-dim); border-left:2px solid var(--swir1-band); padding-left:9px; line-height:1.5; }
+
+  .result{ text-align:center; }
+  .result .verdict{ font-family:'IBM Plex Mono', monospace; font-size:15px; font-weight:600; margin-bottom:6px; }
+  .result.win .verdict{ color:var(--correct); }
+  .result.lose .verdict{ color:var(--wrong); }
+  .result .answer{ font-size:14px; margin-bottom:4px; }
+  .result .ndvi{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--text-dim); margin-bottom:12px; }
+  .result .note{ font-size:12.5px; color:var(--text-dim); line-height:1.55; margin-bottom:16px; text-align:left; background:#101B15; border:1px solid var(--panel-border); border-radius:5px; padding:10px 12px; }
+  .share{ font-family:'IBM Plex Mono', monospace; background:var(--accent); color:#1a0c11; border:none; border-radius:5px; padding:10px 16px; font-size:13px; font-weight:600; cursor:pointer; }
+  .emojirow{ font-size:20px; letter-spacing:4px; margin:10px 0 14px; }
+
+  .gridrow{ display:flex; gap:10px; margin-bottom:10px; }
+  .gridcol{ flex:1; text-align:center; }
+  .gridcol .lbl{ font-family:'IBM Plex Mono', monospace; font-size:10px; color:var(--text-dim); letter-spacing:0.06em; margin-bottom:6px; }
+  .gridcol canvas{ border-radius:4px; border:1px solid var(--panel-border); }
+
+  .code{
+    font-family:'IBM Plex Mono', monospace; font-size:12.5px; background:#0B120E;
+    border:1px solid var(--panel-border); border-radius:5px; padding:12px 14px; margin-bottom:14px;
+    color:#B9D1BE; line-height:1.6; overflow-x:auto; white-space:pre;
+  }
+  .code .blank{ color:var(--nir-band); font-weight:700; }
+
+  footer{ text-align:center; font-size:11px; color:var(--text-dim); margin-top:20px; line-height:1.6; }
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="mark">SPEC<span>TRA</span></div>
+      <div class="tag" id="modeTag">daily reflectance-signature puzzle</div>
+    </div>
+    <div class="stats">
+      PUZZLE <b id="puzzleNo">—</b><br>
+      STREAK <b id="streakNo">0</b><br>
+      <span class="tierbadge" id="tierBadge">—</span>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" id="tabSig">SIGNATURE</button>
+    <button class="tab" id="tabFn">FUNCTION</button>
+  </div>
+
+  <!-- ===================== SIGNATURE MODE ===================== -->
+  <div id="sigMode">
+    <div class="panel">
+      <div class="panel-label"><span>SPECTRAL SCAN</span><span id="ndviLive">NDVI —</span></div>
+      <canvas id="chart" width="900" height="420"></canvas>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="panel" id="sigGamePanel">
+      <div class="panel-label"><span>IDENTIFY THE SURFACE</span><span id="sigAttemptsLabel">0/4</span></div>
+      <div class="attempts" id="sigAttemptsRow"></div>
+      <div class="prompt">This reflectance curve was sampled from a single pixel. What is it?</div>
+      <div class="choices" id="sigChoices"></div>
+      <div class="hintlog" id="sigHintlog"></div>
+    </div>
+
+    <div class="panel result" id="sigResultPanel" style="display:none;"></div>
+  </div>
+
+  <!-- ===================== FUNCTION MODE ===================== -->
+  <div id="fnMode" class="hidden">
+    <div class="panel">
+      <div class="panel-label"><span>RASTER OPERATION</span><span></span></div>
+      <div class="gridrow">
+        <div class="gridcol"><div class="lbl">BEFORE</div><canvas id="fnBefore" width="220" height="220"></canvas></div>
+        <div class="gridcol"><div class="lbl">AFTER</div><canvas id="fnAfter" width="220" height="220"></canvas></div>
+      </div>
+      <div class="code" id="fnCode"></div>
+    </div>
+
+    <div class="panel" id="fnGamePanel">
+      <div class="panel-label"><span>WHICH FUNCTION PRODUCED THIS?</span><span id="fnAttemptsLabel">0/4</span></div>
+      <div class="attempts" id="fnAttemptsRow"></div>
+      <div class="choices" id="fnChoices"></div>
+      <div class="hintlog" id="fnHintlog"></div>
+    </div>
+
+    <div class="panel result" id="fnResultPanel" style="display:none;"></div>
+  </div>
+
+  <footer>
+    Signature mode: illustrative reflectance values, jittered daily. Function mode: synthetic terrain grids for visual clarity, not real DEM data.<br>
+    New puzzles every day at 00:00 UTC.
+  </footer>
+
+</div>
+
+<script>
+(function(){
+
+  // ---------- shared: deterministic RNG ----------
+  function xmur3(str){
+    let h = 1779033703 ^ str.length;
+    for (let i=0;i<str.length;i++){
+      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    return function(){
+      h = Math.imul(h ^ (h>>>16), 2246822507);
+      h = Math.imul(h ^ (h>>>13), 3266489909);
+      h ^= h >>> 16;
+      return h >>> 0;
+    };
+  }
+  function mulberry32(a){
+    return function(){
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a>>>15), 1 | a);
+      t = (t + Math.imul(t ^ (t>>>7), 61 | t)) ^ t;
+      return ((t ^ (t>>>14)) >>> 0) / 4294967296;
+    };
+  }
+  function shuffle(arr, rng){
+    const a = arr.slice();
+    for (let i=a.length-1;i>0;i--){
+      const j = Math.floor(rng()*(i+1));
+      [a[i],a[j]]=[a[j],a[i]];
+    }
+    return a;
+  }
+
+  const today = new Date().toISOString().slice(0,10);
+  const epoch = new Date('2026-01-01T00:00:00Z');
+  const puzzleNo = Math.floor((new Date(today+'T00:00:00Z') - epoch) / 86400000) + 1;
+  document.getElementById('puzzleNo').textContent = '#' + puzzleNo;
+
+  // difficulty tier — cycles weekly, like Wordle's soft ramp across a week
+  const dayOfWeek = (puzzleNo - 1) % 7; // 0=Mon in this scheme
+  let tier = 'easy';
+  if (dayOfWeek >= 5) tier = 'hard';
+  else if (dayOfWeek >= 2) tier = 'medium';
+  const tierBadge = document.getElementById('tierBadge');
+  tierBadge.textContent = tier.toUpperCase();
+  tierBadge.style.background = 'var(--' + tier + ')';
+  tierBadge.style.color = '#0E1512';
+
+  const STORE_KEY = 'spectra-progress';
+  let progress = { sigStreak:0, fnStreak:0, results:{} };
+  async function loadProgress(){
+    try{
+      const r = await window.storage.get(STORE_KEY);
+      if (r && r.value) progress = JSON.parse(r.value);
+    }catch(e){}
+    document.getElementById('streakNo').textContent = progress.sigStreak || 0;
+  }
+  async function saveProgress(){
+    try{ await window.storage.set(STORE_KEY, JSON.stringify(progress)); }
+    catch(e){ console.error('save failed', e); }
+  }
+
+  // ---------- tab switching ----------
+  const tabSig = document.getElementById('tabSig');
+  const tabFn = document.getElementById('tabFn');
+  const sigMode = document.getElementById('sigMode');
+  const fnMode = document.getElementById('fnMode');
+  const modeTag = document.getElementById('modeTag');
+  const streakNo = document.getElementById('streakNo');
+  tabSig.addEventListener('click', ()=>{
+    tabSig.classList.add('active'); tabFn.classList.remove('active');
+    sigMode.classList.remove('hidden'); fnMode.classList.add('hidden');
+    modeTag.textContent = 'daily reflectance-signature puzzle';
+    streakNo.textContent = progress.sigStreak || 0;
+  });
+  tabFn.addEventListener('click', ()=>{
+    tabFn.classList.add('active'); tabSig.classList.remove('active');
+    fnMode.classList.remove('hidden'); sigMode.classList.add('hidden');
+    modeTag.textContent = 'daily guess-the-function puzzle';
+    streakNo.textContent = progress.fnStreak || 0;
+  });
+
+  /* =====================================================================
+     SIGNATURE MODE
+     ===================================================================== */
+  (function(){
+    const BANDS = [
+      {label:'BLUE', hex:'#3E7CB1'}, {label:'GREEN', hex:'#4F9153'},
+      {label:'RED', hex:'#C1443A'}, {label:'NIR', hex:'#D6577A'},
+      {label:'SWIR1', hex:'#C99A4A'}, {label:'SWIR2', hex:'#8C6A3F'},
+    ];
+
+    const ALL_CLASSES = [
+      { id:'healthy', name:'Healthy conifer canopy', bands:[3,6,4,45,22,10],
+        hints:['Reflectance drops sharply between Red and Green, strong chlorophyll absorption.',
+               'NIR reflectance is roughly 3–4x higher than any visible band.',
+               'Common across intact, actively photosynthesizing forest canopy.'],
+        note:'Live foliage absorbs red and blue light for photosynthesis but scatters NIR strongly at the leaf mesophyll; the classic "red edge" jump between Red and NIR.' },
+      { id:'stressed', name:'Drought-stressed / senescent vegetation', bands:[5,9,12,30,28,16],
+        hints:['The Red/NIR contrast is present but noticeably weaker than a healthy canopy.',
+               'SWIR1 reflectance is elevated relative to a healthy stand; canopy moisture is dropping.',
+               'Chlorophyll breakdown is raising visible reflectance while NIR is starting to fall.'],
+        note:'As chlorophyll degrades and leaf water content drops, visible reflectance rises and NIR falls; the signature flattens toward soil-like curves before leaf drop.' },
+      { id:'burned', name:'Burn scar / char', bands:[4,5,6,8,12,10],
+        hints:['Every band is low, this surface is dark across the whole spectrum.',
+               'NIR reflectance collapses well below any vegetated curve.',
+               'SWIR bands are only modestly elevated, consistent with residual ash and exposed soil.'],
+        note:'Fire removes the NIR-scattering leaf structure and deposits dark ash/char, suppressing reflectance broadly; the basis of burn-severity indices like dNBR.' },
+      { id:'impervious', name:'Impervious surface (pavement/rooftop)', bands:[10,12,14,18,22,19],
+        hints:['There is no strong feature anywhere in the curve. Reflectance stays moderate and fairly flat across all bands.',
+               'NIR reflectance is well below any vegetated curve, but clearly above open water.',
+               'The overall level and flatness point to a built, non-vegetated, non-soil surface.'],
+        note:'Impervious surfaces lack both the chlorophyll absorption feature of vegetation and the steady SWIR rise of soil; asphalt, concrete, and rooftops tend to sit at moderate, comparatively flat reflectance across all bands, which is why urban mapping often leans on spectral flatness and low vegetation-index values rather than one diagnostic band.' },
+      { id:'soil', name:'Bare soil', bands:[12,15,20,25,32,28],
+        hints:['The curve rises fairly steadily from Blue through SWIR1; no sharp red-edge jump.',
+               'SWIR1 is the single highest band; typical of exposed, dry mineral soil.',
+               'There is no strong Red-to-NIR contrast at all, unlike any vegetated class.'],
+        note:'Bare soil lacks a chlorophyll absorption feature or a leaf-structure NIR jump, so its curve rises gradually, peaking in the SWIR where mineral and moisture absorption dominate.' },
+      { id:'water', name:'Open water', bands:[6,4,2,1,0.5,0.3],
+        hints:['Reflectance is low everywhere and falls almost to zero by NIR.',
+               'By SWIR1/SWIR2, reflectance is essentially negligible, water absorbs strongly here.',
+               'Blue and Green are the highest bands on the whole curve, not Red or NIR.'],
+        note:'Water absorbs strongly with increasing wavelength, so reflectance peaks in Blue/Green and drops toward zero by NIR/SWIR; the near-inverse of a vegetation curve.' },
+    ];
+
+    const TIER_POOLS = {
+      easy:   ['healthy','water','soil'],
+      medium: ['healthy','stressed','burned','soil','water'],
+      hard:   ['healthy','stressed','burned','impervious','soil','water'],
+    };
+    let CLASSES = ALL_CLASSES.filter(c => TIER_POOLS[tier].includes(c.id));
+
+    const seedFn = xmur3(today + '-sig');
+    const rng = mulberry32(seedFn());
+
+    let answer, jittered, ndvi;
+    function buildPuzzle(){
+      const idx = Math.floor(rng() * CLASSES.length);
+      answer = CLASSES[idx];
+      jittered = answer.bands.map(v=>{
+        const jitter = (rng()-0.5) * Math.max(1.5, v*0.12);
+        return Math.max(0.1, +(v+jitter).toFixed(1));
+      });
+      ndvi = ((jittered[3]-jittered[2]) / (jittered[3]+jittered[2])).toFixed(2);
+    }
+
+    // optional hook: real data drop-in. If a puzzle-bank.json sits alongside
+    // this file (e.g. hosted on GitHub Pages) with entries shaped like
+    // {id, name, bands:[6 numbers], hints:[3 strings], note}, use those
+    // instead of the synthetic set. Fails silently in local/offline preview.
+    async function tryLoadRealBank(){
+      try{
+        const res = await fetch('puzzle-bank.json');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data) && data.length >= 3 && data[0].bands){
+          const filtered = data.filter(c => TIER_POOLS[tier].includes(c.id));
+          if (filtered.length >= 2) CLASSES = filtered;
+        }
+      }catch(e){ /* no external bank available — using synthetic set */ }
+    }
+
+    const MAX_ATTEMPTS = tier === 'hard' ? 3 : 4;
+    let attemptsUsed = 0, wrongIds = [], finished = false;
+
+    const canvas = document.getElementById('chart');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const padL=50, padR=20, padT=16, padB=40;
+    const plotW = W-padL-padR, plotH = H-padT-padB, maxY=50;
+    function xFor(i){ return padL + (i/(BANDS.length-1))*plotW; }
+    function yFor(v){ return padT + plotH - (Math.min(v,maxY)/maxY)*plotH; }
+
+    function drawStatic(){
+      ctx.clearRect(0,0,W,H);
+      ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=1;
+      ctx.font="11px 'IBM Plex Mono', monospace"; ctx.fillStyle='rgba(143,166,154,0.8)';
+      for (let g=0; g<=5; g++){
+        const val=g*10, y=yFor(val);
+        ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(W-padR,y); ctx.stroke();
+        ctx.fillText(val+'%', 8, y+4);
+      }
+      BANDS.forEach((b,i)=>{
+        const x=xFor(i); ctx.fillStyle=b.hex; ctx.textAlign='center'; ctx.fillText(b.label, x, H-14);
+      });
+      ctx.textAlign='left';
+    }
+    function drawCurve(frac){
+      drawStatic();
+      ctx.save();
+      ctx.beginPath(); ctx.rect(padL,0,plotW*frac,H); ctx.clip();
+      ctx.beginPath(); ctx.lineWidth=2.4; ctx.strokeStyle='#E7EFE9';
+      jittered.forEach((v,i)=>{ const x=xFor(i),y=yFor(v); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+      ctx.stroke();
+      jittered.forEach((v,i)=>{
+        const x=xFor(i),y=yFor(v);
+        ctx.beginPath(); ctx.arc(x,y,4.5,0,Math.PI*2); ctx.fillStyle=BANDS[i].hex; ctx.fill();
+        ctx.strokeStyle='#0E1512'; ctx.lineWidth=1.5; ctx.stroke();
+      });
+      ctx.restore();
+    }
+    function animateReveal(){
+      let start=null; const dur=900;
+      function step(ts){
+        if(!start) start=ts;
+        const frac=Math.min(1,(ts-start)/dur);
+        drawCurve(frac);
+        if(frac<1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+    function renderLegend(){
+      document.getElementById('legend').innerHTML = BANDS.map(b=>
+        `<span><span class="swatch" style="background:${b.hex}"></span>${b.label}</span>`).join('');
+    }
+
+    function renderAttempts(){
+      const row = document.getElementById('sigAttemptsRow'); row.innerHTML='';
+      for (let i=0;i<MAX_ATTEMPTS;i++){
+        const d=document.createElement('div'); d.className='dot';
+        if (i<wrongIds.length){ d.classList.add('used-wrong'); d.textContent='✕'; }
+        row.appendChild(d);
+      }
+      document.getElementById('sigAttemptsLabel').textContent = attemptsUsed+'/'+MAX_ATTEMPTS;
+    }
+    function renderChoices(){
+      const wrap = document.getElementById('sigChoices'); wrap.innerHTML='';
+      shuffle(CLASSES, rng).forEach(c=>{
+        const btn=document.createElement('button'); btn.className='choice'; btn.textContent=c.name;
+        btn.addEventListener('click', ()=>handleGuess(c, btn));
+        wrap.appendChild(btn);
+      });
+    }
+    function addHint(text){
+      const div=document.createElement('div'); div.className='hint'; div.textContent=text;
+      document.getElementById('sigHintlog').appendChild(div);
+    }
+    function handleGuess(choice, btn){
+      if (finished) return;
+      if (choice.id === answer.id){
+        btn.classList.add('correct'); btn.disabled=true; attemptsUsed++;
+        finishGame(true);
+      } else {
+        btn.classList.add('wrong'); btn.disabled=true;
+        wrongIds.push(choice.id); attemptsUsed++;
+        renderAttempts();
+        const hi = wrongIds.length-1;
+        if (hi < answer.hints.length) addHint('Hint '+(hi+1)+': '+answer.hints[hi]);
+        if (attemptsUsed >= MAX_ATTEMPTS) finishGame(false);
+      }
+    }
+    function buildEmojiRow(won, wrongCount){
+      let row=''; for(let i=0;i<wrongCount;i++) row+='🟥';
+      if (won) row+='🟩';
+      for(let i=0;i<MAX_ATTEMPTS-wrongCount-(won?1:0);i++) row+='⬛';
+      return row;
+    }
+    function finishGame(won){
+      finished = true;
+      document.getElementById('sigGamePanel').style.display='none';
+      const wrongCount = wrongIds.length;
+      progress.sigStreak = won ? (progress.sigStreak||0)+1 : 0;
+      progress.results = progress.results || {};
+      progress.results[today+'-sig'] = { won, wrongCount, answer: answer.id };
+      saveProgress();
+      streakNo.textContent = progress.sigStreak;
+      renderResult(won, wrongCount);
+    }
+    function renderResult(won, wrongCount){
+      const panel = document.getElementById('sigResultPanel');
+      panel.style.display='block';
+      panel.className = 'result panel ' + (won?'win':'lose');
+      const emojiRow = buildEmojiRow(won, wrongCount);
+      panel.innerHTML = `
+        <div class="verdict">${won?'IDENTIFIED':'NOT IDENTIFIED'}</div>
+        <div class="answer">${answer.name}</div>
+        <div class="ndvi">NDVI ${ndvi} · ${tier.toUpperCase()} · streak ${progress.sigStreak}</div>
+        <div class="emojirow">${emojiRow}</div>
+        <div class="note">${answer.note}</div>
+        <button class="share" id="sigShareBtn">COPY RESULT</button>`;
+      document.getElementById('sigShareBtn').addEventListener('click', ()=>{
+        const text = `SPECTRA #${puzzleNo} [${tier}] ${won?(wrongCount+1):'X'}/${MAX_ATTEMPTS}\n${emojiRow}`;
+        if (navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(text).then(()=>{
+            const b=document.getElementById('sigShareBtn'); b.textContent='COPIED';
+            setTimeout(()=>{ b.textContent='COPY RESULT'; }, 1400);
+          }).catch(()=>{});
+        }
+      });
+    }
+    function renderFinishedState(result){
+      document.getElementById('sigGamePanel').style.display='none';
+      wrongIds = new Array(result.wrongCount).fill('x'); finished=true;
+      renderResult(result.won, result.wrongCount);
+    }
+
+    (async function init(){
+      await tryLoadRealBank();
+      buildPuzzle();
+      renderLegend(); renderAttempts(); renderChoices();
+      document.getElementById('ndviLive').textContent = 'NDVI ' + ndvi;
+      drawStatic(); animateReveal();
+      await loadProgress();
+      streakNo.textContent = progress.sigStreak || 0;
+      if (progress.results && progress.results[today+'-sig']){
+        renderFinishedState(progress.results[today+'-sig']);
+      }
+    })();
+  })();
+
+  /* =====================================================================
+     FUNCTION MODE — "guess the terra operation"
+     ===================================================================== */
+  (function(){
+    const N = 12; // grid size
+    const seedFn = xmur3(today + '-fn');
+    const rng = mulberry32(seedFn());
+
+    // build a synthetic terrain-like base grid (smooth hills + fine grain)
+    function buildBaseGrid(){
+      const fx = 1 + rng()*1.5, fy = 1 + rng()*1.5;
+      const px = rng()*Math.PI*2, py = rng()*Math.PI*2;
+      const g = [];
+      for (let r=0;r<N;r++){
+        const row=[];
+        for (let c=0;c<N;c++){
+          let v = 0.5 + 0.35*Math.sin((r/N)*Math.PI*fx+px)*Math.cos((c/N)*Math.PI*fy+py);
+          v += (rng()-0.5)*0.12; // fine grain
+          row.push(Math.min(1,Math.max(0,v)));
+        }
+        g.push(row);
+      }
+      return g;
+    }
+
+    function colorFor(v){
+      const stops = [[0,[23,49,58]],[0.4,[79,145,83]],[0.75,[201,154,74]],[1,[231,239,233]]];
+      for (let i=0;i<stops.length-1;i++){
+        const [t0,c0]=stops[i], [t1,c1]=stops[i+1];
+        if (v>=t0 && v<=t1){
+          const f=(v-t0)/(t1-t0);
+          return `rgb(${Math.round(c0[0]+(c1[0]-c0[0])*f)},${Math.round(c0[1]+(c1[1]-c0[1])*f)},${Math.round(c0[2]+(c1[2]-c0[2])*f)})`;
+        }
+      }
+      return 'rgb(231,239,233)';
+    }
+
+    function drawGrid(canvas, grid, opts){
+      opts = opts || {};
+      const ctx = canvas.getContext('2d');
+      const rows = grid.length, cols = grid[0].length;
+      const cw = canvas.width/cols, ch = canvas.height/rows;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      for (let r=0;r<rows;r++){
+        for (let c=0;c<cols;c++){
+          const v = grid[r][c];
+          if (v === null){
+            ctx.fillStyle = '#0E1512';
+            ctx.fillRect(c*cw, r*ch, cw+0.5, ch+0.5);
+            ctx.strokeStyle = '#2A362F'; ctx.beginPath();
+            ctx.moveTo(c*cw, r*ch); ctx.lineTo(c*cw+cw, r*ch+ch); ctx.stroke();
+          } else if (opts.classify){
+            const palette = ['#3E7CB1','#4F9153','#C99A4A','#C1443A','#D6577A'];
+            const bin = Math.min(palette.length-1, Math.floor(v*palette.length));
+            ctx.fillStyle = palette[bin];
+            ctx.fillRect(c*cw, r*ch, cw+0.5, ch+0.5);
+          } else if (opts.edge){
+            const g = Math.round(v*255);
+            ctx.fillStyle = `rgb(${Math.round(16+g*0.6)},${Math.round(27-g*0.1)},${Math.round(21+g*0.2)})`;
+            // blend toward accent for high slope
+            ctx.fillStyle = colorMix('#101B15','#D6577A', v);
+            ctx.fillRect(c*cw, r*ch, cw+0.5, ch+0.5);
+          } else {
+            ctx.fillStyle = colorFor(v);
+            ctx.fillRect(c*cw, r*ch, cw+0.5, ch+0.5);
+          }
+        }
+      }
+      if (opts.cropRect){
+        const [r0,c0,r1,c1] = opts.cropRect;
+        ctx.strokeStyle = '#E7EFE9'; ctx.lineWidth = 2;
+        ctx.strokeRect(c0*cw, r0*ch, (c1-c0)*cw, (r1-r0)*ch);
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.fillRect(0,0,canvas.width, r0*ch);
+        ctx.fillRect(0,r1*ch,canvas.width, canvas.height-r1*ch);
+        ctx.fillRect(0,r0*ch,c0*cw,(r1-r0)*ch);
+        ctx.fillRect(c1*cw,r0*ch,canvas.width-c1*cw,(r1-r0)*ch);
+      }
+    }
+    function colorMix(hexA, hexB, t){
+      const a=hexA.match(/\w\w/g).map(x=>parseInt(x,16));
+      const b=hexB.match(/\w\w/g).map(x=>parseInt(x,16));
+      const m=a.map((v,i)=>Math.round(v+(b[i]-v)*t));
+      return `rgb(${m[0]},${m[1]},${m[2]})`;
+    }
+
+    // ---- transforms ----
+    function aggregateGrid(grid, k){
+      const rows=grid.length, cols=grid[0].length;
+      const out = grid.map(r=>r.slice());
+      for (let r=0;r<rows;r+=k){
+        for (let c=0;c<cols;c+=k){
+          let sum=0,n=0;
+          for (let rr=r; rr<Math.min(rows,r+k); rr++)
+            for (let cc=c; cc<Math.min(cols,c+k); cc++){ sum+=grid[rr][cc]; n++; }
+          const mean = sum/n;
+          for (let rr=r; rr<Math.min(rows,r+k); rr++)
+            for (let cc=c; cc<Math.min(cols,c+k); cc++) out[rr][cc]=mean;
+        }
+      }
+      return out;
+    }
+    function focalMean(grid, w){
+      const rows=grid.length, cols=grid[0].length, half=Math.floor(w/2);
+      const out=[];
+      for (let r=0;r<rows;r++){
+        const row=[];
+        for (let c=0;c<cols;c++){
+          let sum=0,n=0;
+          for (let dr=-half;dr<=half;dr++)
+            for (let dc=-half;dc<=half;dc++){
+              const rr=r+dr, cc=c+dc;
+              if (rr>=0&&rr<rows&&cc>=0&&cc<cols){ sum+=grid[rr][cc]; n++; }
+            }
+          row.push(sum/n);
+        }
+        out.push(row);
+      }
+      return out;
+    }
+    function slopeGrid(grid){
+      const rows=grid.length, cols=grid[0].length;
+      const out=[]; let maxG=0.0001;
+      const tmp=[];
+      for (let r=0;r<rows;r++){
+        const row=[];
+        for (let c=0;c<cols;c++){
+          const dx = grid[r][Math.min(cols-1,c+1)] - grid[r][Math.max(0,c-1)];
+          const dy = grid[Math.min(rows-1,r+1)][c] - grid[Math.max(0,r-1)][c];
+          const g = Math.sqrt(dx*dx+dy*dy);
+          maxG = Math.max(maxG,g);
+          row.push(g);
+        }
+        tmp.push(row);
+      }
+      for (let r=0;r<rows;r++) out.push(tmp[r].map(v=>v/maxG));
+      return out;
+    }
+    function classifyGrid(grid){ return grid.map(r=>r.slice()); } // color mapping handled at draw time
+    function maskGrid(grid){
+      const rows=grid.length, cols=grid[0].length;
+      const cr=rows/2, cc=cols/2, rad=Math.min(rows,cols)*0.28;
+      return grid.map((row,r)=>row.map((v,c)=>{
+        const d = Math.sqrt((r-cr)**2+(c-cc)**2);
+        return d<rad ? null : v;
+      }));
+    }
+    function cropGrid(grid){
+      const r0=2,c0=2,r1=N-2,c1=N-2;
+      const sub=[];
+      for (let r=r0;r<r1;r++) sub.push(grid[r].slice(c0,c1));
+      return { sub, rect:[r0,c0,r1,c1] };
+    }
+
+    const OPS = [
+      { id:'aggregate', label:'aggregate()', code:'result <- ____(rast, fact = 3, fun = "mean")',
+        apply(base){ return { after: aggregateGrid(base,3), afterOpts:{} }; },
+        hints:['The output has fewer independent values than the input — many cells now share one value.',
+               'Cell size increases; the same values simply cover larger blocks.',
+               'This is a resolution-coarsening operation, not a smoothing one — no blending across block edges.'],
+        note:'terra::aggregate() reduces resolution by averaging (or summing/etc.) blocks of cells into one coarser cell — the classic way to downsample a raster.' },
+      { id:'focal', label:'focal()', code:'result <- ____(rast, w = 3, fun = "mean")',
+        apply(base){ return { after: focalMean(base,3), afterOpts:{} }; },
+        hints:['Resolution is unchanged — same number of cells before and after.',
+               'Local noise is smoothed out, but broad spatial patterns are preserved.',
+               'Every output cell is a weighted/simple average of its neighborhood in the input.'],
+        note:'terra::focal() applies a moving-window function (commonly mean) across the raster — same resolution, smoothed values, used for denoising or generalizing surfaces.' },
+      { id:'terrain', label:'terrain(v="slope")', code:'result <- ____(elev, v = "slope", unit = "degrees")',
+        apply(base){ return { after: slopeGrid(base), afterOpts:{edge:true} }; },
+        hints:['The output highlights where values change quickly between neighbors, not the values themselves.',
+               'Flat areas in the input become low/dark in the output, regardless of elevation.',
+               'This is a derivative of the surface, not a filtered version of it.'],
+        note:'terra::terrain() computes topographic derivatives like slope/aspect from an elevation raster — output values represent rate of change, not elevation.' },
+      { id:'classify', label:'classify()', code:'result <- ____(rast, rcl = breaks_matrix)',
+        apply(base){ return { after: classifyGrid(base), afterOpts:{classify:true} }; },
+        hints:['The output uses a small palette of discrete colors rather than a continuous gradient.',
+               'Nearby cells with similar-but-not-identical input values often end up an identical output value.',
+               'This turns a continuous surface into categorical zones.'],
+        note:'terra::classify() reclassifies continuous values into discrete categories using a break/reclassification matrix — the basis for making land-cover-style maps from continuous indices.' },
+      { id:'mask', label:'mask()', code:'result <- ____(rast, boundary_vect)',
+        apply(base){ return { after: maskGrid(base), afterOpts:{} }; },
+        hints:['Most of the grid is completely unchanged from the input.',
+               'A region has become NoData — nothing is recolored, some cells are simply removed.',
+               'The removed region\'s shape comes from a second, separate spatial object.'],
+        note:'terra::mask() sets cells outside (or inside) a given vector boundary to NA, leaving all other values untouched — used to clip a raster to a study area or exclude a region.' },
+      { id:'crop', label:'crop()', code:'result <- ____(rast, ext(box))',
+        apply(base){ const {sub,rect}=cropGrid(base); return { after: base, afterOpts:{cropRect:rect}, afterOverride: sub }; },
+        hints:['Every value inside the kept region is identical to the input — nothing was recalculated.',
+               'The output raster simply covers less area than the input.',
+               'No values change, only the spatial extent does.'],
+        note:'terra::crop() trims a raster to a smaller extent — values are untouched, only the spatial extent shrinks.' },
+    ];
+
+    const opIndex = Math.floor(rng()*OPS.length);
+    const op = OPS[opIndex];
+    const baseGrid = buildBaseGrid();
+    const result = op.apply(baseGrid);
+
+    document.getElementById('fnCode').innerHTML = op.code.replace('____', '<span class="blank">____</span>');
+
+    const beforeCanvas = document.getElementById('fnBefore');
+    const afterCanvas = document.getElementById('fnAfter');
+    drawGrid(beforeCanvas, baseGrid, {});
+    if (op.id === 'crop'){
+      drawGrid(beforeCanvas, baseGrid, {cropRect: result.afterOpts.cropRect});
+      afterCanvas.width = 220; afterCanvas.height = 220;
+      drawGrid(afterCanvas, result.afterOverride, {});
+    } else {
+      drawGrid(afterCanvas, result.after, result.afterOpts);
+    }
+
+    const MAX_ATTEMPTS = tier === 'hard' ? 3 : 4;
+    let attemptsUsed=0, wrongIds=[], finished=false;
+
+    function renderAttempts(){
+      const row=document.getElementById('fnAttemptsRow'); row.innerHTML='';
+      for (let i=0;i<MAX_ATTEMPTS;i++){
+        const d=document.createElement('div'); d.className='dot';
+        if (i<wrongIds.length){ d.classList.add('used-wrong'); d.textContent='✕'; }
+        row.appendChild(d);
+      }
+      document.getElementById('fnAttemptsLabel').textContent = attemptsUsed+'/'+MAX_ATTEMPTS;
+    }
+    function renderChoices(){
+      const wrap=document.getElementById('fnChoices'); wrap.innerHTML='';
+      shuffle(OPS, rng).forEach(o=>{
+        const btn=document.createElement('button'); btn.className='choice'; btn.textContent=o.label;
+        btn.addEventListener('click', ()=>handleGuess(o, btn));
+        wrap.appendChild(btn);
+      });
+    }
+    function addHint(text){
+      const div=document.createElement('div'); div.className='hint'; div.textContent=text;
+      document.getElementById('fnHintlog').appendChild(div);
+    }
+    function handleGuess(choice, btn){
+      if (finished) return;
+      if (choice.id === op.id){
+        btn.classList.add('correct'); btn.disabled=true; attemptsUsed++;
+        finishGame(true);
+      } else {
+        btn.classList.add('wrong'); btn.disabled=true;
+        wrongIds.push(choice.id); attemptsUsed++;
+        renderAttempts();
+        const hi=wrongIds.length-1;
+        if (hi<op.hints.length) addHint('Hint '+(hi+1)+': '+op.hints[hi]);
+        if (attemptsUsed>=MAX_ATTEMPTS) finishGame(false);
+      }
+    }
+    function buildEmojiRow(won, wrongCount){
+      let row=''; for(let i=0;i<wrongCount;i++) row+='🟥';
+      if (won) row+='🟩';
+      for(let i=0;i<MAX_ATTEMPTS-wrongCount-(won?1:0);i++) row+='⬛';
+      return row;
+    }
+    function finishGame(won){
+      finished=true;
+      document.getElementById('fnGamePanel').style.display='none';
+      const wrongCount = wrongIds.length;
+      progress.fnStreak = won ? (progress.fnStreak||0)+1 : 0;
+      progress.results = progress.results || {};
+      progress.results[today+'-fn'] = { won, wrongCount, answer: op.id };
+      saveProgress();
+      if (!tabSig.classList.contains('active')) streakNo.textContent = progress.fnStreak;
+      renderResult(won, wrongCount);
+    }
+    function renderResult(won, wrongCount){
+      const panel=document.getElementById('fnResultPanel');
+      panel.style.display='block';
+      panel.className='result panel '+(won?'win':'lose');
+      const emojiRow = buildEmojiRow(won, wrongCount);
+      panel.innerHTML = `
+        <div class="verdict">${won?'SOLVED':'NOT SOLVED'}</div>
+        <div class="answer">${op.label}</div>
+        <div class="ndvi">${tier.toUpperCase()} · streak ${progress.fnStreak}</div>
+        <div class="emojirow">${emojiRow}</div>
+        <div class="note">${op.note}</div>
+        <button class="share" id="fnShareBtn">COPY RESULT</button>`;
+      document.getElementById('fnShareBtn').addEventListener('click', ()=>{
+        const text = `SPECTRA-FN #${puzzleNo} [${tier}] ${won?(wrongCount+1):'X'}/${MAX_ATTEMPTS}\n${emojiRow}`;
+        if (navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(text).then(()=>{
+            const b=document.getElementById('fnShareBtn'); b.textContent='COPIED';
+            setTimeout(()=>{ b.textContent='COPY RESULT'; }, 1400);
+          }).catch(()=>{});
+        }
+      });
+    }
+    function renderFinishedState(r){
+      document.getElementById('fnGamePanel').style.display='none';
+      wrongIds = new Array(r.wrongCount).fill('x'); finished=true;
+      renderResult(r.won, r.wrongCount);
+    }
+
+    renderAttempts();
+    renderChoices();
+
+    (async function checkDone(){
+      await loadProgress();
+      if (progress.results && progress.results[today+'-fn']){
+        renderFinishedState(progress.results[today+'-fn']);
+      }
+    })();
+  })();
+
+})();
+</script>
+</body>
+</html>
