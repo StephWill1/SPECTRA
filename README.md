@@ -2,7 +2,7 @@
  
 A daily remote sensing puzzle, in the spirit of [Wordle](https://www.nytimes.com/games/wordle) and [pydle.net](https://pydle.net). One small challenge a day, a handful of guesses, a result you can share.
  
-**[Play it here →](#)**
+**[Play it here**
  
 New puzzles drop every day at 00:00 UTC. Everyone gets the same one.
  
